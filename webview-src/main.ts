@@ -1,5 +1,4 @@
 import { Editor, rootCtx, defaultValueCtx } from '@milkdown/kit/core';
-import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
@@ -38,7 +37,6 @@ async function initEditor(initialContent: string): Promise<void> {
       });
     })
     .config(nord)
-    .use(commonmark)
     .use(gfm)
     .use(history)
     .use(clipboard)
