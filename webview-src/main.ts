@@ -9,12 +9,7 @@ import { replaceAll } from '@milkdown/kit/utils';
 
 // acquireVsCodeApi() is injected by the VS Code webview runtime.
 // It MUST be called exactly once per webview lifetime.
-declare function acquireVsCodeApi(): {
-  postMessage: (msg: unknown) => void;
-  setState: (state: unknown) => void;
-  getState: () => unknown;
-};
-
+// Type provided by @types/vscode-webview.
 const vscode = acquireVsCodeApi();
 
 let editor: Editor | null = null;
@@ -25,9 +20,14 @@ let editor: Editor | null = null;
 let isUpdatingFromHost = false;
 
 async function initEditor(initialContent: string): Promise<void> {
+  const editorEl = document.getElementById('editor');
+  if (!editorEl) {
+    throw new Error('MdTyper: #editor element not found in webview HTML');
+  }
+
   editor = await Editor.make()
-    .config(ctx => {
-      ctx.set(rootCtx, document.getElementById('editor')!);
+    .config((ctx) => {
+      ctx.set(rootCtx, editorEl);
       ctx.set(defaultValueCtx, initialContent);
 
       ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prevMarkdown) => {
@@ -46,21 +46,49 @@ async function initEditor(initialContent: string): Promise<void> {
     .create();
 }
 
-// Receive messages from the extension host
-window.addEventListener('message', async (event: MessageEvent) => {
-  const msg = event.data as { type: string; content?: string };
+function isUpdateMessage(
+  value: unknown,
+): value is { type: 'update'; content: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<string, unknown>)['type'] === 'update' &&
+    typeof (value as Record<string, unknown>)['content'] === 'string'
+  );
+}
 
-  if (msg.type === 'update' && typeof msg.content === 'string') {
-    if (editor === null) {
-      // First message after 'ready': initialize Milkdown with document content
-      await initEditor(msg.content);
-    } else {
-      // Subsequent update (e.g. external file change): replace editor content
-      isUpdatingFromHost = true;
-      editor.action(replaceAll(msg.content));
-      isUpdatingFromHost = false;
+// Receive messages from the extension host
+window.addEventListener('message', (event: MessageEvent) => {
+  void (async () => {
+    try {
+      if (!isUpdateMessage(event.data)) {
+        return;
+      }
+      const content = event.data.content;
+      if (editor === null) {
+        // First message after 'ready': initialize Milkdown with document content.
+        // Guard must be set here too: ProseMirror dispatches a transaction for the
+        // initial document load, which would fire markdownUpdated and echo the
+        // content back as an 'edit', marking the file dirty on first open.
+        isUpdatingFromHost = true;
+        try {
+          await initEditor(content);
+        } finally {
+          isUpdatingFromHost = false;
+        }
+      } else {
+        // Subsequent update (e.g. external file change): replace editor content
+        isUpdatingFromHost = true;
+        try {
+          editor.action(replaceAll(content));
+        } finally {
+          isUpdatingFromHost = false;
+        }
+      }
+    } catch (err) {
+      console.error('MdTyper: error handling message from extension host', err);
     }
-  }
+  })();
 });
 
 // Tell the extension host the webview is ready to receive content

@@ -1,4 +1,4 @@
-# YouType
+# MdTyper
 
 A Typora-inspired WYSIWYG Markdown editor for Visual Studio Code. Write Markdown without seeing Markdown — headings, bold, lists, tables, and code blocks render inline as you type.
 
@@ -12,24 +12,23 @@ A Typora-inspired WYSIWYG Markdown editor for Visual Studio Code. Write Markdown
 
 ## Requirements
 
-- Visual Studio Code 1.90 or later
-- Node.js 18+ (for development only)
+- Visual Studio Code 1.109 or later
 
 ## Installation
 
 ### From the Marketplace
 
-Search for **YouType** in the VS Code Extensions panel and click Install.
+Search for **MdTyper** in the VS Code Extensions panel and click Install.
 
 ### From a `.vsix` file
 
 ```bash
-code --install-extension youtype-0.0.1.vsix
+code --install-extension mdtyper-0.0.1.vsix
 ```
 
 ## Usage
 
-Open any `.md` file — YouType activates automatically as the default editor.
+Open any `.md` file — MdTyper activates automatically as the default editor.
 
 ### Keyboard shortcuts
 
@@ -45,7 +44,11 @@ Open any `.md` file — YouType activates automatically as the default editor.
 
 Right-click the tab → **Reopen Editor With...** → **Text Editor**
 
-Or run the command: **YouType: Reopen as Text Editor**
+Or run the command: **MdTyper: Reopen as Text Editor**
+
+## Known Issues
+
+None yet. Please report issues via the repository's issue tracker.
 
 ## Development
 
@@ -53,7 +56,7 @@ Or run the command: **YouType: Reopen as Text Editor**
 
 ```bash
 git clone <repo-url>
-cd youtype
+cd mdtyper
 npm install
 ```
 
@@ -63,32 +66,36 @@ npm install
 npm run build
 ```
 
-This runs esbuild with two targets:
-- `out/extension.js` — extension host bundle (Node.js)
-- `out/webview.js` — webview bundle (browser, includes Milkdown)
+This runs esbuild with two targets and copies the webview stylesheet:
+- `dist/extension.js` — extension host bundle (Node.js)
+- `dist/webview.js` — webview bundle (browser, includes Milkdown)
+- `dist/theme.css` — webview stylesheet (copied from `webview-src/`)
 
 ### Run in development
 
-1. Open the `youtype/` folder in VS Code
+1. Open the `mdtyper/` folder in VS Code
 2. Press **F5** to launch the Extension Development Host
 3. Open any `.md` file in the new window
 
-After making changes, reload the Extension Development Host with `Ctrl+Shift+P` → **Developer: Reload Window**. The `--watch` mode rebuilds automatically:
+After making changes, reload the Extension Development Host with `Ctrl+Shift+P` → **Developer: Reload Window**. The `--watch` mode rebuilds JS automatically:
 
 ```bash
 npm run watch
 ```
 
+> **Note:** `theme.css` changes are not picked up by `--watch`. After editing the stylesheet, run `npm run build` once and reload the window manually.
+
 ### Package
 
 ```bash
-npm run vscode:prepublish
-npx @vscode/vsce package
+npm run package
 ```
+
+This runs the production build (`vscode:prepublish`) and then packages everything into `mdtyper-0.0.1.vsix`.
 
 ## Architecture
 
-YouType uses the VS Code [Custom Editor API](https://code.visualstudio.com/api/extension-guides/custom-editors). When a `.md` file is opened, the extension creates a `WebviewPanel` that hosts [Milkdown](https://milkdown.dev) — a ProseMirror-based WYSIWYG Markdown editor.
+MdTyper uses the VS Code [Custom Editor API](https://code.visualstudio.com/api/extension-guides/custom-editors). When a `.md` file is opened, the extension creates a `WebviewPanel` that hosts [Milkdown](https://milkdown.dev) — a ProseMirror-based WYSIWYG Markdown editor.
 
 ```
 VS Code

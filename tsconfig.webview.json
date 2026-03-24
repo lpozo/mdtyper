@@ -4,13 +4,15 @@
     "moduleResolution": "Bundler",
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
-    "outDir": "out",
+    "outDir": "dist",
     "rootDir": "webview-src",
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
     "sourceMap": true,
     "declaration": false,
     "skipLibCheck": true
   },
   "include": ["webview-src/**/*.ts"],
-  "exclude": ["node_modules", "out"]
+  "exclude": ["node_modules", "dist"]
 }

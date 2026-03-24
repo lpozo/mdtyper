@@ -4,5 +4,10 @@ src/**
 webview-src/**
 tsconfig*.json
 esbuild.mjs
+eslint.config.mjs
+.prettierrc
+CLAUDE.md
+package-lock.json
+scripts/**
 node_modules/**
-out/**/*.js.map
+dist/**/*.js.map

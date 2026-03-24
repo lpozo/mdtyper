@@ -1,22 +1,18 @@
 import * as vscode from 'vscode';
 
 // Messages sent FROM extension host TO webview
-type WebviewMessage =
-  | { type: 'update'; content: string };
+type WebviewMessage = { type: 'update'; content: string };
 
 // Messages sent FROM webview TO extension host
-type ExtensionMessage =
-  | { type: 'ready' }
-  | { type: 'edit'; content: string };
+type ExtensionMessage = { type: 'ready' } | { type: 'edit'; content: string };
 
-export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
-
-  public static readonly viewType = 'youtype.markdownEditor';
+export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
+  public static readonly viewType = 'mdtyper.markdownEditor';
 
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
-    const provider = new YouTypeEditorProvider(context);
+    const provider = new MdTyperEditorProvider(context);
     return vscode.window.registerCustomEditorProvider(
-      YouTypeEditorProvider.viewType,
+      MdTyperEditorProvider.viewType,
       provider,
       {
         webviewOptions: {
@@ -24,7 +20,7 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
           retainContextWhenHidden: true,
         },
         supportsMultipleEditorsPerDocument: false,
-      }
+      },
     );
   }
 
@@ -33,14 +29,12 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
     webviewPanel: vscode.WebviewPanel,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<void> {
     webviewPanel.webview.options = {
       enableScripts: true,
       localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, 'out'),
-        vscode.Uri.joinPath(this.context.extensionUri, 'webview-src'),
-        vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+        vscode.Uri.joinPath(this.context.extensionUri, 'dist'),
       ],
     };
 
@@ -52,24 +46,29 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
     let isUpdatingFromWebview = false;
 
     // Extension host → Webview: push updated document content on external change
-    const onDidChangeDocument = vscode.workspace.onDidChangeTextDocument(e => {
-      if (e.document.uri.toString() !== document.uri.toString()) {
-        return;
-      }
-      if (isUpdatingFromWebview) {
-        // We caused this change; don't echo it back
-        return;
-      }
-      webviewPanel.webview.postMessage({
-        type: 'update',
-        content: document.getText(),
-      } satisfies WebviewMessage);
-    });
+    const onDidChangeDocument = vscode.workspace.onDidChangeTextDocument(
+      (e) => {
+        if (e.document.uri.toString() !== document.uri.toString()) {
+          return;
+        }
+        if (isUpdatingFromWebview) {
+          // We caused this change; don't echo it back
+          return;
+        }
+        webviewPanel.webview.postMessage({
+          type: 'update',
+          content: document.getText(),
+        } satisfies WebviewMessage);
+      },
+    );
 
     // Webview → Extension host: apply user edits to the TextDocument
     const onDidReceiveMessage = webviewPanel.webview.onDidReceiveMessage(
-      async (msg: ExtensionMessage) => {
-        switch (msg.type) {
+      async (raw: unknown) => {
+        if (!isExtensionMessage(raw)) {
+          return;
+        }
+        switch (raw.type) {
           case 'ready':
             // Webview just initialized; send the current document content
             webviewPanel.webview.postMessage({
@@ -85,16 +84,23 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
               edit.replace(
                 document.uri,
                 new vscode.Range(0, 0, document.lineCount, 0),
-                msg.content
+                raw.content,
               );
-              await vscode.workspace.applyEdit(edit);
+              const applied = await vscode.workspace.applyEdit(edit);
+              if (!applied) {
+                console.error(
+                  'MdTyper: applyEdit returned false — edit was rejected',
+                );
+              }
+            } catch (err) {
+              console.error('MdTyper: applyEdit threw unexpectedly', err);
             } finally {
               isUpdatingFromWebview = false;
             }
             break;
           }
         }
-      }
+      },
     );
 
     webviewPanel.onDidDispose(() => {
@@ -105,17 +111,17 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview.js')
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview.js'),
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'webview-src', 'theme.css')
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'theme.css'),
     );
 
     // Nonce locks script execution to our bundle only
     const nonce = getNonce();
     const cspSource = webview.cspSource;
 
-    return /* html */`<!DOCTYPE html>
+    return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -127,7 +133,7 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
                  img-src ${cspSource} https: data:;
                  font-src ${cspSource};">
   <link rel="stylesheet" href="${styleUri}" />
-  <title>YouType</title>
+  <title>MdTyper</title>
 </head>
 <body>
   <div id="editor"></div>
@@ -137,9 +143,24 @@ export class YouTypeEditorProvider implements vscode.CustomTextEditorProvider {
   }
 }
 
+function isExtensionMessage(value: unknown): value is ExtensionMessage {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const type = (value as Record<string, unknown>)['type'];
+  if (type === 'ready') {
+    return true;
+  }
+  if (type === 'edit') {
+    return typeof (value as Record<string, unknown>)['content'] === 'string';
+  }
+  return false;
+}
+
 function getNonce(): string {
   let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const possible =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   for (let i = 0; i < 32; i++) {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }

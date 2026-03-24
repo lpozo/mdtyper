@@ -1,22 +1,20 @@
 import * as vscode from 'vscode';
-import { YouTypeEditorProvider } from './YouTypeEditorProvider';
+import { MdTyperEditorProvider } from './MdTyperEditorProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(
-    YouTypeEditorProvider.register(context)
-  );
+  context.subscriptions.push(MdTyperEditorProvider.register(context));
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('youtype.openAsText', () => {
+    vscode.commands.registerCommand('mdtyper.openAsText', () => {
       const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
       if (activeTab?.input instanceof vscode.TabInputCustom) {
         vscode.commands.executeCommand(
           'vscode.openWith',
           activeTab.input.uri,
-          'default'
+          'default',
         );
       }
-    })
+    }),
   );
 }
 
