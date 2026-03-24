@@ -171,6 +171,46 @@ body {
   );
 }
 
+/* ── Mode toggle button ── */
+#toggle-btn {
+  position: fixed;
+  top: 8px;
+  right: 16px;
+  z-index: 100;
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  border: none;
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+#toggle-btn:hover {
+  opacity: 1;
+  background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+/* ── Raw markdown textarea ── */
+#raw {
+  display: none;
+  width: 100%;
+  min-height: 100vh;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 48px;
+  background: transparent;
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
+  font-size: var(--vscode-editor-font-size, 14px);
+  line-height: 1.7;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
 /* ── ProseMirror placeholder ── */
 .milkdown .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
