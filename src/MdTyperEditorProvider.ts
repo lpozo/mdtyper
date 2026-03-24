@@ -4,7 +4,10 @@ import * as vscode from 'vscode';
 type WebviewMessage = { type: 'update'; content: string };
 
 // Messages sent FROM webview TO extension host
-type ExtensionMessage = { type: 'ready' } | { type: 'edit'; content: string };
+type ExtensionMessage =
+  | { type: 'ready' }
+  | { type: 'edit'; content: string }
+  | { type: 'link'; href: string };
 
 export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
   public static readonly viewType = 'mdtyper.markdownEditor';
@@ -77,6 +80,23 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
             } satisfies WebviewMessage);
             break;
 
+          case 'link': {
+            const href = raw.href;
+            if (/^https?:\/\//i.test(href)) {
+              await vscode.env.openExternal(vscode.Uri.parse(href));
+            } else if (!href.startsWith('#')) {
+              // Resolve relative to the directory containing the open document
+              const docDir = vscode.Uri.joinPath(document.uri, '..');
+              const targetUri = vscode.Uri.joinPath(docDir, href);
+              try {
+                await vscode.window.showTextDocument(targetUri);
+              } catch (err) {
+                console.error('MdTyper: could not open link target', err);
+              }
+            }
+            break;
+          }
+
           case 'edit': {
             isUpdatingFromWebview = true;
             try {
@@ -136,7 +156,9 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
   <title>MdTyper</title>
 </head>
 <body>
+  <button id="toggle-btn">Source</button>
   <div id="editor"></div>
+  <textarea id="raw" spellcheck="false"></textarea>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -153,6 +175,9 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
   }
   if (type === 'edit') {
     return typeof (value as Record<string, unknown>)['content'] === 'string';
+  }
+  if (type === 'link') {
+    return typeof (value as Record<string, unknown>)['href'] === 'string';
   }
   return false;
 }

@@ -75,6 +75,7 @@ dist/                       Build output (gitignored — never edit directly)
 | Webview → Host | `{ type: 'ready' }` | Webview loaded; request initial content |
 | Host → Webview | `{ type: 'update', content: string }` | Send/refresh document content |
 | Webview → Host | `{ type: 'edit', content: string }` | User made a change |
+| Webview → Host | `{ type: 'link', href: string }` | User clicked a link; host resolves and opens it |
 
 **Echo-loop guards:** `isUpdatingFromWebview` (`MdTyperEditorProvider.ts`) and `isUpdatingFromHost` (`main.ts`) — both must be reset in `finally`.
 
