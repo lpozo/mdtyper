@@ -136,6 +136,9 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'theme.css'),
     );
+    const nordThemeUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'nord-theme.css'),
+    );
 
     // Nonce locks script execution to our bundle only
     const nonce = getNonce();
@@ -152,6 +155,7 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
                  script-src 'nonce-${nonce}';
                  img-src ${cspSource} https: data:;
                  font-src ${cspSource};">
+  <link rel="stylesheet" href="${nordThemeUri}" />
   <link rel="stylesheet" href="${styleUri}" />
   <title>MdTyper</title>
 </head>

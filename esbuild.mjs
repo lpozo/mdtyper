@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { copyFile } from 'node:fs/promises';
+import { copyFile, readFile } from 'node:fs/promises';
 
 const isWatch = process.argv.includes('--watch');
 const isProd = process.argv.includes('--production');
@@ -35,6 +35,12 @@ async function copyAssets() {
   // theme.css is a runtime asset loaded by the webview; copy it into dist/
   // so it is included in the .vsix package alongside the JS bundles.
   await copyFile('webview-src/theme.css', 'dist/theme.css');
+
+  // Copy nord theme CSS so it can be loaded by the webview
+  await copyFile(
+    'node_modules/@milkdown/theme-nord/lib/style.css',
+    'dist/nord-theme.css',
+  );
 }
 
 if (isWatch) {

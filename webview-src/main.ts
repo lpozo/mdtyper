@@ -1,10 +1,14 @@
+
 import { Editor, rootCtx, defaultValueCtx } from '@milkdown/kit/core';
+import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
+import { link } from '@milkdown/plugin-link';
 import { nord } from '@milkdown/theme-nord';
 import { replaceAll } from '@milkdown/kit/utils';
+import remarkGfm from 'remark-gfm';
 
 // acquireVsCodeApi() is injected by the VS Code webview runtime.
 // It MUST be called exactly once per webview lifetime.
@@ -82,12 +86,15 @@ toggleBtn.addEventListener('click', () => {
 });
 
 async function initEditor(initialContent: string): Promise<void> {
+  console.log('MdTyper: creating editor with content length:', initialContent.length);
   editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, editorEl);
       ctx.set(defaultValueCtx, initialContent);
+      ctx.update('remarkPlugins', (prev = []) => [...prev, remarkGfm]);
 
       ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prevMarkdown) => {
+        console.log('MdTyper: markdownUpdated, raw:', JSON.stringify(markdown));
         currentMarkdown = markdown;
         if (isUpdatingFromHost) {
           return;
@@ -96,11 +103,14 @@ async function initEditor(initialContent: string): Promise<void> {
       });
     })
     .config(nord)
+    .use(commonmark)
     .use(gfm)
     .use(history)
     .use(clipboard)
     .use(listener)
+    .use(link)
     .create();
+  console.log('MdTyper: editor created successfully');
 }
 
 function isUpdateMessage(
@@ -118,10 +128,13 @@ function isUpdateMessage(
 window.addEventListener('message', (event: MessageEvent) => {
   void (async () => {
     try {
+      console.log('MdTyper: received message', event.data);
       if (!isUpdateMessage(event.data)) {
+        console.log('MdTyper: message is not an update message');
         return;
       }
       const content = event.data.content;
+      console.log('MdTyper: received content, length:', content.length);
       currentMarkdown = content;
 
       if (mode === 'raw') {
@@ -136,8 +149,10 @@ window.addEventListener('message', (event: MessageEvent) => {
         // Guard must be set here too: ProseMirror dispatches a transaction for the
         // initial document load, which would fire markdownUpdated and echo the
         // content back as an 'edit', marking the file dirty on first open.
+        console.log('MdTyper: initializing editor with content');
         setHostUpdateGuard();
         await initEditor(content);
+        console.log('MdTyper: editor initialized');
       } else {
         // Subsequent update (e.g. external file change): replace editor content
         setHostUpdateGuard();
@@ -165,5 +180,10 @@ document.addEventListener('click', (e: MouseEvent) => {
   vscode.postMessage({ type: 'link', href });
 });
 
+// Log that script has loaded
+console.log('MdTyper: script loaded, posting ready message');
+console.log('MdTyper: editor element found:', !!editorEl);
+
 // Tell the extension host the webview is ready to receive content
 vscode.postMessage({ type: 'ready' });
+console.log('MdTyper: ready message posted');

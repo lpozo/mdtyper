@@ -95,13 +95,18 @@ body {
 }
 
 /* ── Links ── */
-.milkdown .ProseMirror a {
-  color: var(--vscode-textLink-foreground, #4daafc);
-  text-decoration: none;
+.milkdown .ProseMirror a,
+.milkdown-theme-nord a,
+.milkdown-theme-nord.prose a {
+  color: var(--vscode-textLink-foreground, #4daafc) !important;
+  text-decoration: none !important;
+  cursor: pointer;
 }
-.milkdown .ProseMirror a:hover {
-  text-decoration: underline;
-  color: var(--vscode-textLink-activeForeground, #4daafc);
+.milkdown .ProseMirror a:hover,
+.milkdown-theme-nord a:hover,
+.milkdown-theme-nord.prose a:hover {
+  text-decoration: underline !important;
+  color: var(--vscode-textLink-activeForeground, #4daafc) !important;
 }
 
 /* ── Blockquotes ── */
