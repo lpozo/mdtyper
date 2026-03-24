@@ -1,13 +1,7 @@
 import * as vscode from 'vscode';
-
-// Messages sent FROM extension host TO webview
-type WebviewMessage = { type: 'update'; content: string };
-
-// Messages sent FROM webview TO extension host
-type ExtensionMessage =
-  | { type: 'ready' }
-  | { type: 'edit'; content: string }
-  | { type: 'link'; href: string };
+import { isExtensionMessage, type WebviewMessage } from './messages';
+import { resolveLink } from './link-resolver';
+import { getHtmlForWebview } from './webview-html';
 
 export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
   public static readonly viewType = 'mdtyper.markdownEditor';
@@ -41,21 +35,22 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
       ],
     };
 
-    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
+    webviewPanel.webview.html = getHtmlForWebview(
+      webviewPanel.webview,
+      this.context.extensionUri,
+    );
 
     // Guard flag: prevents echo loop when we apply a WorkspaceEdit in response
     // to a webview 'edit' message — that edit fires onDidChangeTextDocument,
     // which without this flag would re-send the content back to the webview.
     let isUpdatingFromWebview = false;
 
-    // Extension host → Webview: push updated document content on external change
     const onDidChangeDocument = vscode.workspace.onDidChangeTextDocument(
       (e) => {
         if (e.document.uri.toString() !== document.uri.toString()) {
           return;
         }
         if (isUpdatingFromWebview) {
-          // We caused this change; don't echo it back
           return;
         }
         webviewPanel.webview.postMessage({
@@ -65,7 +60,6 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
       },
     );
 
-    // Webview → Extension host: apply user edits to the TextDocument
     const onDidReceiveMessage = webviewPanel.webview.onDidReceiveMessage(
       async (raw: unknown) => {
         if (!isExtensionMessage(raw)) {
@@ -80,22 +74,9 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
             } satisfies WebviewMessage);
             break;
 
-          case 'link': {
-            const href = raw.href;
-            if (/^https?:\/\//i.test(href)) {
-              await vscode.env.openExternal(vscode.Uri.parse(href));
-            } else if (!href.startsWith('#')) {
-              // Resolve relative to the directory containing the open document
-              const docDir = vscode.Uri.joinPath(document.uri, '..');
-              const targetUri = vscode.Uri.joinPath(docDir, href);
-              try {
-                await vscode.window.showTextDocument(targetUri);
-              } catch (err) {
-                console.error('MdTyper: could not open link target', err);
-              }
-            }
+          case 'link':
+            await resolveLink(raw.href, document.uri);
             break;
-          }
 
           case 'edit': {
             isUpdatingFromWebview = true;
@@ -128,70 +109,4 @@ export class MdTyperEditorProvider implements vscode.CustomTextEditorProvider {
       onDidReceiveMessage.dispose();
     });
   }
-
-  private getHtmlForWebview(webview: vscode.Webview): string {
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview.js'),
-    );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'theme.css'),
-    );
-    const nordThemeUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'nord-theme.css'),
-    );
-
-    // Nonce locks script execution to our bundle only
-    const nonce = getNonce();
-    const cspSource = webview.cspSource;
-
-    return /* html */ `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none';
-                 style-src ${cspSource} 'unsafe-inline';
-                 script-src 'nonce-${nonce}';
-                 img-src ${cspSource} https: data:;
-                 font-src ${cspSource};">
-  <link rel="stylesheet" href="${nordThemeUri}" />
-  <link rel="stylesheet" href="${styleUri}" />
-  <title>MdTyper</title>
-</head>
-<body>
-  <button id="toggle-btn">Source</button>
-  <div id="editor"></div>
-  <textarea id="raw" spellcheck="false"></textarea>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
-  }
-}
-
-function isExtensionMessage(value: unknown): value is ExtensionMessage {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const type = (value as Record<string, unknown>)['type'];
-  if (type === 'ready') {
-    return true;
-  }
-  if (type === 'edit') {
-    return typeof (value as Record<string, unknown>)['content'] === 'string';
-  }
-  if (type === 'link') {
-    return typeof (value as Record<string, unknown>)['href'] === 'string';
-  }
-  return false;
-}
-
-function getNonce(): string {
-  let text = '';
-  const possible =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
 }

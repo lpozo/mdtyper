@@ -1,46 +1,7 @@
-
-import { Editor, rootCtx, defaultValueCtx } from '@milkdown/kit/core';
-import { commonmark } from '@milkdown/kit/preset/commonmark';
-import { gfm } from '@milkdown/kit/preset/gfm';
-import { history } from '@milkdown/kit/plugin/history';
-import { clipboard } from '@milkdown/kit/plugin/clipboard';
-import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { link } from '@milkdown/plugin-link';
-import { nord } from '@milkdown/theme-nord';
-import { replaceAll } from '@milkdown/kit/utils';
-import remarkGfm from 'remark-gfm';
-
-// acquireVsCodeApi() is injected by the VS Code webview runtime.
-// It MUST be called exactly once per webview lifetime.
-// Type provided by @types/vscode-webview.
-const vscode = acquireVsCodeApi();
-
-let editor: Editor | null = null;
-
-// Guard: when the extension host sends an 'update' message we apply replaceAll,
-// which triggers markdownUpdated. Without this flag we'd echo the content back
-// as an 'edit' message, causing an infinite update loop.
-//
-// markdownUpdated is debounced by 200ms inside Milkdown, so the flag must stay
-// true long enough to cover that window. We use a timer instead of a finally
-// block to avoid resetting the flag before the debounced callback fires.
-let isUpdatingFromHost = false;
-let hostUpdateTimer: ReturnType<typeof setTimeout> | undefined;
-
-function setHostUpdateGuard(): void {
-  isUpdatingFromHost = true;
-  if (hostUpdateTimer !== undefined) clearTimeout(hostUpdateTimer);
-  hostUpdateTimer = setTimeout(() => {
-    isUpdatingFromHost = false;
-    hostUpdateTimer = undefined;
-  }, 300); // > 200ms Milkdown debounce
-}
-
-// Last known markdown content — kept in sync by both views so toggling is lossless.
-let currentMarkdown = '';
-
-type Mode = 'wysiwyg' | 'raw';
-let mode: Mode = 'wysiwyg';
+import { postReady, postEdit } from './vscode-bridge';
+import { EditorService } from './editor-service';
+import { ModeController } from './mode-controller';
+import { initLinkInterceptor } from './link-interceptor';
 
 const editorEl = document.getElementById('editor');
 const rawEl = document.getElementById('raw') as HTMLTextAreaElement | null;
@@ -56,62 +17,17 @@ if (!toggleBtn) {
   throw new Error('MdTyper: #toggle-btn element not found in webview HTML');
 }
 
-// Forward raw textarea edits to the extension host in real time
+const editorService = new EditorService();
+const modeController = new ModeController(editorEl, rawEl, toggleBtn, editorService);
+
 rawEl.addEventListener('input', () => {
-  currentMarkdown = rawEl.value;
-  vscode.postMessage({ type: 'edit', content: rawEl.value });
+  editorService.currentMarkdown = rawEl.value;
+  postEdit(rawEl.value);
 });
 
 toggleBtn.addEventListener('click', () => {
-  if (mode === 'wysiwyg') {
-    rawEl.value = currentMarkdown;
-    editorEl.style.display = 'none';
-    rawEl.style.display = 'block';
-    rawEl.focus();
-    toggleBtn.textContent = 'WYSIWYG';
-    mode = 'raw';
-  } else {
-    const rawContent = rawEl.value;
-    editorEl.style.display = '';
-    rawEl.style.display = 'none';
-    toggleBtn.textContent = 'Source';
-    mode = 'wysiwyg';
-    if (editor !== null && rawContent !== currentMarkdown) {
-      setHostUpdateGuard();
-      editor.action(replaceAll(rawContent));
-      currentMarkdown = rawContent;
-      vscode.postMessage({ type: 'edit', content: rawContent });
-    }
-  }
+  modeController.toggle();
 });
-
-async function initEditor(initialContent: string): Promise<void> {
-  console.log('MdTyper: creating editor with content length:', initialContent.length);
-  editor = await Editor.make()
-    .config((ctx) => {
-      ctx.set(rootCtx, editorEl);
-      ctx.set(defaultValueCtx, initialContent);
-      ctx.update('remarkPlugins', (prev = []) => [...prev, remarkGfm]);
-
-      ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prevMarkdown) => {
-        console.log('MdTyper: markdownUpdated, raw:', JSON.stringify(markdown));
-        currentMarkdown = markdown;
-        if (isUpdatingFromHost) {
-          return;
-        }
-        vscode.postMessage({ type: 'edit', content: markdown });
-      });
-    })
-    .config(nord)
-    .use(commonmark)
-    .use(gfm)
-    .use(history)
-    .use(clipboard)
-    .use(listener)
-    .use(link)
-    .create();
-  console.log('MdTyper: editor created successfully');
-}
 
 function isUpdateMessage(
   value: unknown,
@@ -124,7 +40,6 @@ function isUpdateMessage(
   );
 }
 
-// Receive messages from the extension host
 window.addEventListener('message', (event: MessageEvent) => {
   void (async () => {
     try {
@@ -135,28 +50,26 @@ window.addEventListener('message', (event: MessageEvent) => {
       }
       const content = event.data.content;
       console.log('MdTyper: received content, length:', content.length);
-      currentMarkdown = content;
+      editorService.currentMarkdown = content;
 
-      if (mode === 'raw') {
+      if (modeController.currentMode === 'raw') {
         // In raw mode: update the textarea directly; Milkdown is not mounted yet
         // (first load) or is hidden — don't touch it.
-        rawEl.value = content;
+        modeController.updateRaw(content);
         return;
       }
 
-      if (editor === null) {
+      if (!editorService.isReady) {
         // First message after 'ready': initialize Milkdown with document content.
         // Guard must be set here too: ProseMirror dispatches a transaction for the
         // initial document load, which would fire markdownUpdated and echo the
         // content back as an 'edit', marking the file dirty on first open.
         console.log('MdTyper: initializing editor with content');
-        setHostUpdateGuard();
-        await initEditor(content);
+        editorService.setHostUpdateGuard();
+        await editorService.init(editorEl, content);
         console.log('MdTyper: editor initialized');
       } else {
-        // Subsequent update (e.g. external file change): replace editor content
-        setHostUpdateGuard();
-        editor.action(replaceAll(content));
+        editorService.replaceContent(content);
       }
     } catch (err) {
       console.error('MdTyper: error handling message from extension host', err);
@@ -164,26 +77,10 @@ window.addEventListener('message', (event: MessageEvent) => {
   })();
 });
 
-// Intercept link clicks and forward them to the extension host.
-// Milkdown renders links as <a> elements; default navigation is blocked in
-// webviews, so we must handle it ourselves.
-document.addEventListener('click', (e: MouseEvent) => {
-  const anchor = (e.target as HTMLElement).closest('a');
-  if (!anchor) {
-    return;
-  }
-  const href = anchor.getAttribute('href');
-  if (!href) {
-    return;
-  }
-  e.preventDefault();
-  vscode.postMessage({ type: 'link', href });
-});
+initLinkInterceptor();
 
-// Log that script has loaded
 console.log('MdTyper: script loaded, posting ready message');
 console.log('MdTyper: editor element found:', !!editorEl);
 
-// Tell the extension host the webview is ready to receive content
-vscode.postMessage({ type: 'ready' });
+postReady();
 console.log('MdTyper: ready message posted');
