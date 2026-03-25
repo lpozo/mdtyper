@@ -1,4 +1,9 @@
-import { Editor, rootCtx, defaultValueCtx, remarkPluginsCtx } from '@milkdown/kit/core';
+import {
+  Editor,
+  rootCtx,
+  defaultValueCtx,
+  remarkPluginsCtx,
+} from '@milkdown/kit/core';
 import type { RemarkPlugin } from '@milkdown/transformer';
 import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
@@ -56,17 +61,24 @@ export class EditorService {
         ctx.set(defaultValueCtx, initialContent);
         // remarkGfm's TS signature doesn't structurally match RemarkPlugin<...>,
         // but it is a valid remark plugin at runtime — cast via unknown.
-        const gfmPlugin = remarkGfm as unknown as RemarkPlugin<Record<string, unknown>>;
+        const gfmPlugin = remarkGfm as unknown as RemarkPlugin<
+          Record<string, unknown>
+        >;
         ctx.update(remarkPluginsCtx, (prev) => [...prev, gfmPlugin]);
 
-        ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prevMarkdown) => {
-          console.log('MdTyper: markdownUpdated, raw:', JSON.stringify(markdown));
-          this._currentMarkdown = markdown;
-          if (this.isUpdatingFromHost) {
-            return;
-          }
-          postEdit(markdown);
-        });
+        ctx
+          .get(listenerCtx)
+          .markdownUpdated((_ctx, markdown, _prevMarkdown) => {
+            console.log(
+              'MdTyper: markdownUpdated, raw:',
+              JSON.stringify(markdown),
+            );
+            this._currentMarkdown = markdown;
+            if (this.isUpdatingFromHost) {
+              return;
+            }
+            postEdit(markdown);
+          });
       })
       .config(nord)
       .use(commonmark)

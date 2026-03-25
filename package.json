@@ -50,11 +50,11 @@
     ]
   },
   "scripts": {
-    "build": "node esbuild.mjs",
-    "watch": "node esbuild.mjs --watch",
-    "vscode:prepublish": "node esbuild.mjs --production",
+    "build": "node scripts/esbuild.mjs",
+    "watch": "node scripts/esbuild.mjs --watch",
+    "vscode:prepublish": "node scripts/esbuild.mjs --production",
     "package": "vsce package",
-    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.webview.json && eslint src webview-src",
+    "lint": "tsc --noEmit && tsc --noEmit -p webview-src/tsconfig.json && eslint src webview-src",
     "format": "prettier --write src webview-src",
     "format:check": "prettier --check src webview-src"
   },

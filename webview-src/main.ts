@@ -5,7 +5,9 @@ import { initLinkInterceptor } from './link-interceptor';
 
 const editorEl = document.getElementById('editor');
 const rawEl = document.getElementById('raw') as HTMLTextAreaElement | null;
-const toggleBtn = document.getElementById('toggle-btn') as HTMLButtonElement | null;
+const toggleBtn = document.getElementById(
+  'toggle-btn',
+) as HTMLButtonElement | null;
 
 if (!editorEl) {
   throw new Error('MdTyper: #editor element not found in webview HTML');
@@ -18,7 +20,12 @@ if (!toggleBtn) {
 }
 
 const editorService = new EditorService();
-const modeController = new ModeController(editorEl, rawEl, toggleBtn, editorService);
+const modeController = new ModeController(
+  editorEl,
+  rawEl,
+  toggleBtn,
+  editorService,
+);
 
 rawEl.addEventListener('input', () => {
   editorService.currentMarkdown = rawEl.value;

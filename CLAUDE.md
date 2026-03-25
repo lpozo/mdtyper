@@ -15,18 +15,23 @@ Never read or suggest edits to these:
 | `node_modules/**` | Managed by npm |
 | `package-lock.json` | Managed by npm — do not edit manually |
 | `*.vsix` | Packaged artifact — regenerate with `npm run package` |
-| `scripts/**` | One-time dev utilities, not part of the extension |
 
 ### Where to make changes
 
 | To change… | Edit this file |
 |-----------|----------------|
 | Extension activation or commands | `src/extension.ts` |
-| Document sync, webview HTML, CSP | `src/MdTyperEditorProvider.ts` |
-| Editor behaviour (Milkdown, messages) | `webview-src/main.ts` |
+| Document sync / message handling | `src/MdTyperEditorProvider.ts` |
+| Webview HTML template / CSP | `src/webview-html.ts` |
+| Message type definitions | `src/messages.ts` |
+| Link opening logic (HTTP, relative, anchors) | `src/link-resolver.ts` |
+| Milkdown init / editor state | `webview-src/editor-service.ts` |
+| WYSIWYG ↔ raw mode toggle | `webview-src/mode-controller.ts` |
+| Link click interception | `webview-src/link-interceptor.ts` |
+| VSCode API bridge (postMessage wrappers) | `webview-src/vscode-bridge.ts` |
 | Visual styles / VS Code theme variables | `webview-src/theme.css` |
 | VS Code contribution points, metadata | `package.json` |
-| Build process | `esbuild.mjs` |
+| Build process | `scripts/esbuild.mjs` |
 | Lint rules | `eslint.config.mjs` |
 
 ### After every change
@@ -61,11 +66,22 @@ VSCode Extension Host (TypeScript / Node.js)
 ```
 src/
   extension.ts              Activation + command registration
-  MdTyperEditorProvider.ts  Core editor provider (HTML, doc sync, CSP)
+  MdTyperEditorProvider.ts  Document sync, message dispatch, echo-loop guard
+  webview-html.ts           Webview HTML template + nonce-based CSP
+  messages.ts               Shared message types + isExtensionMessage() type guard
+  link-resolver.ts          Opens HTTP links, relative paths, ignores fragments
 webview-src/
-  main.ts                   Milkdown init + message bridge
+  main.ts                   Bootstrap: DOM queries, event listeners, message handler
+  editor-service.ts         Milkdown init, replaceContent, host-update echo guard
+  mode-controller.ts        WYSIWYG ↔ raw textarea toggle
+  link-interceptor.ts       Intercepts <a> clicks → posts 'link' message
+  vscode-bridge.ts          acquireVsCodeApi() singleton + postMessage helpers
   theme.css                 VS Code token overrides → copied to dist/ at build time
+  tsconfig.json             TypeScript config for webview (type-check only)
 dist/                       Build output (gitignored — never edit directly)
+scripts/
+  esbuild.mjs               Dual-target build script (extension host + webview)
+  build.sh                  Convenience wrapper: bash scripts/build.sh [--production]
 ```
 
 ## Message Protocol
@@ -77,7 +93,9 @@ dist/                       Build output (gitignored — never edit directly)
 | Webview → Host | `{ type: 'edit', content: string }` | User made a change |
 | Webview → Host | `{ type: 'link', href: string }` | User clicked a link; host resolves and opens it |
 
-**Echo-loop guards:** `isUpdatingFromWebview` (`MdTyperEditorProvider.ts`) and `isUpdatingFromHost` (`main.ts`) — both must be reset in `finally`.
+**Echo-loop guards:**
+- `isUpdatingFromWebview` (`MdTyperEditorProvider.ts`) — set before `applyEdit`, always reset in `finally`.
+- `isUpdatingFromHost` (`webview-src/editor-service.ts`) — set via `setHostUpdateGuard()`, auto-resets after 300 ms. Timer-based (not `finally`) because it must outlast Milkdown's internal 200 ms debounce before a synchronous reset would be possible.
 
 ---
 
@@ -85,7 +103,7 @@ dist/                       Build output (gitignored — never edit directly)
 
 | Command | What it does |
 |---------|-------------|
-| `npm run build` | Full build: JS bundles + copies `theme.css` to `dist/` |
+| `npm run build` | Full build: JS bundles + copies `theme.css` and `nord-theme.css` to `dist/` |
 | `npm run watch` | Live JS rebuild (CSS changes still require a manual `build`) |
 | `npm run lint` | `tsc --noEmit` (both tsconfigs) + ESLint |
 | `npm run format` | Prettier — write |
@@ -122,7 +140,7 @@ Both `tsconfig.json` and `tsconfig.webview.json` enable:
 
 ### Type safety rules
 - **`event.data` is `unknown` at runtime** — narrow with a type guard, never cast with `as`. See `isUpdateMessage()` in `webview-src/main.ts`.
-- **Never use `!` on DOM queries** — `getElementById()` can return `null`; throw a descriptive error instead. See `initEditor()` in `webview-src/main.ts`.
+- **Never use `!` on DOM queries** — `getElementById()` can return `null`; throw a descriptive error instead. See DOM element queries at the top of `webview-src/main.ts`.
 - **`acquireVsCodeApi()`** — type is provided by `@types/vscode-webview`; do not redeclare manually.
 
 ### Error handling rules
@@ -147,7 +165,7 @@ Both `tsconfig.json` and `tsconfig.webview.json` enable:
 **Automated (must pass before any commit):**
 1. `npm run lint` — exits 0
 2. `npm run format:check` — exits 0
-3. `npm run build` — produces `dist/extension.js`, `dist/webview.js`, `dist/theme.css`
+3. `npm run build` — produces `dist/extension.js`, `dist/webview.js`, `dist/theme.css`, `dist/nord-theme.css`
 
 **Manual (F5 in VS Code):**
 4. Open any `.md` file → MdTyper custom editor opens (not raw text)

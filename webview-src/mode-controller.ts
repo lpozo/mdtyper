@@ -31,7 +31,10 @@ export class ModeController {
       this.rawEl.style.display = 'none';
       this.toggleBtn.textContent = 'Source';
       this.mode = 'wysiwyg';
-      if (this.editorService.isReady && rawContent !== this.editorService.currentMarkdown) {
+      if (
+        this.editorService.isReady &&
+        rawContent !== this.editorService.currentMarkdown
+      ) {
         this.editorService.replaceContent(rawContent); // sets guard internally
         this.editorService.currentMarkdown = rawContent;
         postEdit(rawContent);
