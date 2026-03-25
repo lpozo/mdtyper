@@ -3,7 +3,6 @@
 src/**
 webview-src/**
 tsconfig*.json
-esbuild.mjs
 eslint.config.mjs
 .prettierrc
 CLAUDE.md
