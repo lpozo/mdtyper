@@ -2,8 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "npm: install",
+      "type": "shell",
+      "command": "npm install",
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
       "type": "npm",
       "script": "watch",
+      "dependsOn": ["npm: install"],
       "group": {
         "kind": "build",
         "isDefault": true
